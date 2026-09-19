@@ -4,9 +4,11 @@ Homework Review is a macOS utility for McGraw Hill Connect. With a Connect quest
 visible in Google Chrome or Safari, press **Option+Q** to read the question, ask
 OpenAI for an answer, and fill it in.
 
-- Fill-in-the-blank and numeric answers are entered automatically.
-- Multiple-choice and multiple-select answers are selected automatically.
-- Dropdowns, tables, and questions that require visual context are not supported.
+- It works with text-only questions whose visible answer controls are standard text
+  fields (including multiple blanks), number fields, radio-button multiple choice,
+  or checkbox multiple-select.
+- It does not support dropdowns, editable tables, matching/drag-and-drop controls,
+  or questions that depend on images, graphs, diagrams, canvases, or other visual context.
 - The utility never clicks **Submit**.
 - Only the question extracted from the browser DOM is sent to OpenAI.
 - Successful runs are silent. The page control changes, but no answer popup appears.
@@ -30,8 +32,8 @@ On the repository's GitHub page, click **Code**, copy the HTTPS URL, then open
 Terminal and run the following. Replace the example URL with the URL you copied.
 
 ```zsh
-git clone https://github.com/YOUR-ACCOUNT/mcgraw-hill-homework-review.git
-cd mcgraw-hill-homework-review
+git clone https://github.com/YOUR-ACCOUNT/mcgraw-hill-autofill.git
+cd mcgraw-hill-autofill
 ```
 
 Keep the repository in a permanent location. Moving it later will require updating
@@ -101,11 +103,11 @@ open -e init.lua
 
 Near the top of the file, replace the existing `python` and `script` values with
 paths based on the output of `pwd`. For example, if `pwd` printed
-`/Users/alex/Projects/mcgraw-hill-homework-review`, use:
+`/Users/alex/Projects/mcgraw-hill-autofill`, use:
 
 ```lua
-local python = "/Users/alex/Projects/mcgraw-hill-homework-review/.venv/bin/python"
-local script = "/Users/alex/Projects/mcgraw-hill-homework-review/homework_review.py"
+local python = "/Users/alex/Projects/mcgraw-hill-autofill/.venv/bin/python"
+local script = "/Users/alex/Projects/mcgraw-hill-autofill/homework_review.py"
 ```
 
 Save the file. Both paths must be absolute; `~` will not be expanded here.
@@ -121,7 +123,7 @@ open -e ~/.hammerspoon/init.lua
 Add the following line, again using the actual path printed by `pwd`:
 
 ```lua
-dofile("/Users/alex/Projects/mcgraw-hill-homework-review/init.lua")
+dofile("/Users/alex/Projects/mcgraw-hill-autofill/init.lua")
 ```
 
 If `~/.hammerspoon/init.lua` already contains other automations, add this line at

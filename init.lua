@@ -5,8 +5,8 @@ local workerBuffer = ""
 local workerBusy = false
 local workerStopping = false
 local requestStarted
-local python = "/Users/danielpetrov/Documents/dev/automations/mcgraw-hill-homework-review/.venv/bin/python"
-local script = "/Users/danielpetrov/Documents/dev/automations/mcgraw-hill-homework-review/homework_review.py"
+local python = "/Users/danielpetrov/Documents/dev/automations/mcgraw-hill-autofill/.venv/bin/python"
+local script = "/Users/danielpetrov/Documents/dev/automations/mcgraw-hill-autofill/homework_review.py"
 
 local function handleWorkerLine(line)
     local ok, message = pcall(hs.json.decode, line)
