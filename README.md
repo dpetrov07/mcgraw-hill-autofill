@@ -3,9 +3,7 @@
 McGraw Hill Autofill is a macOS homework autofill utility for McGraw Hill Connect. It
 uses Hammerspoon, browser automation, and the OpenAI API to read a visible Connect
 question in Google Chrome or Safari, generate an answer, and autofill supported
-answer controls with **Option+Q**. Useful search terms: McGraw Hill Connect
-autofill, Connect homework helper, homework answer automation, fill in the blank
-autofill, multiple-choice autofill, and Hammerspoon homework automation.
+answer controls with **Option+Q**.
 
 - It works with text-only questions whose visible answer controls are standard text
   fields (including multiple blanks), number fields, radio-button multiple choice,
