@@ -1,8 +1,11 @@
-# Homework Review
+# McGraw Hill Autofill
 
-Homework Review is a macOS utility for McGraw Hill Connect. With a Connect question
-visible in Google Chrome or Safari, press **Option+Q** to read the question, ask
-OpenAI for an answer, and fill it in.
+McGraw Hill Autofill is a macOS homework autofill utility for McGraw Hill Connect. It
+uses Hammerspoon, browser automation, and the OpenAI API to read a visible Connect
+question in Google Chrome or Safari, generate an answer, and autofill supported
+answer controls with **Option+Q**. Useful search terms: McGraw Hill Connect
+autofill, Connect homework helper, homework answer automation, fill in the blank
+autofill, multiple-choice autofill, and Hammerspoon homework automation.
 
 - It works with text-only questions whose visible answer controls are standard text
   fields (including multiple blanks), number fields, radio-button multiple choice,
