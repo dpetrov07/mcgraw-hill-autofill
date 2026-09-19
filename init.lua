@@ -26,6 +26,8 @@ local function handleWorkerLine(line)
     end
     if message.error then
         hs.alert.show("Homework Review — " .. message.error, 4)
+    elseif message.saved then
+        hs.alert.show("Saved", {textSize = 14, radius = 6, padding = 6}, 1)
     elseif homeworkReviewDebug and message.result then
         print("Homework Review result: " .. hs.json.encode(message.result, true))
         print("Homework Review application: " .. hs.json.encode(message.application, true))
@@ -62,7 +64,7 @@ local function startWorker()
     return homeworkReviewWorker:start() ~= false
 end
 
-local function runHomeworkReview()
+local function runHomeworkReview(learn)
     if workerBusy then return end
     if not startWorker() then
         hs.alert.show("Homework Review worker could not start", 4)
@@ -72,6 +74,7 @@ local function runHomeworkReview()
     requestStarted = hs.timer.absoluteTime()
     homeworkReviewWorker:setInput(hs.json.encode({
         browser = hs.application.frontmostApplication():name(),
+        learn = learn,
         debug = homeworkReviewDebug,
     }) .. "\n")
 end
@@ -86,5 +89,9 @@ hs.shutdownCallback = function()
 end
 
 hs.hotkey.bind({"alt"}, "q", function()
-    runHomeworkReview()
+    runHomeworkReview(false)
+end)
+
+hs.hotkey.bind({"alt", "shift"}, "q", function()
+    runHomeworkReview(true)
 end)

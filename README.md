@@ -10,9 +10,11 @@ answer controls with **Option+Q**.
   or checkbox multiple-select.
 - It does not support dropdowns, editable tables, matching/drag-and-drop controls,
   or questions that depend on images, graphs, diagrams, canvases, or other visual context.
-- The utility never clicks **Submit**.
+- After a graded supported question shows its correct answer, **Option+Shift+Q** saves it
+  locally and reuses it automatically if the same question appears again.
 - Only the question extracted from the browser DOM is sent to OpenAI.
-- Successful runs are silent. The page control changes, but no answer popup appears.
+- It uses OpenAI's `gpt-5.6-luna` model with reasoning disabled. Text-only, uncached
+  requests cost fractions of a cent for hundreds of API requests for answers.
 
 ## Requirements
 
@@ -193,6 +195,17 @@ and that you are using the macOS menu bar at the top of the screen.
 | Shortcut | Action |
 | --- | --- |
 | **Option+Q** | Read the current question and fill a supported answer control. |
+| **Option+Shift+Q** | On a graded supported question, save the displayed correct answer for future repeats. |
+
+## Save reviewed answers
+
+After Connect grades a supported question, leave its review screen visible and
+press **Option+Shift+Q**. The utility saves the displayed correct answer from
+either the choice markers or the **Correct Answer** panel to the local, untracked
+`.answer_cache.json` file. This supports text and numeric fields, multiple choice,
+and multiple select, when Connect exposes the correct answer. When the same text
+question appears later, it uses the saved answer instead of making an OpenAI API
+request.
 
 ## Troubleshooting
 

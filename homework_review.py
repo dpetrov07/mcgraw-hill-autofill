@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -13,6 +14,7 @@ from dotenv import load_dotenv
 
 MODEL = "gpt-5.6-luna"
 client = None
+CACHE_PATH = Path(__file__).with_name(".answer_cache.json")
 
 ANSWER_FORMAT = {
     "type": "json_schema",
@@ -51,7 +53,7 @@ DOM_JS = r"""
   const targetId = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`;
   prompt.dataset.homeworkReviewTarget = targetId;
   const promptCopy = prompt.cloneNode(true);
-  promptCopy.querySelectorAll("script, style, [hidden], ._visuallyHidden").forEach(e => e.remove());
+  promptCopy.querySelectorAll("script, style, [hidden], ._visuallyHidden, .sr-only").forEach(e => e.remove());
   let blankNumber = 0;
   promptCopy.querySelectorAll('.fitb-input, input[type="text"], input:not([type]), input[type="number"], textarea, select').forEach(e => {
     const label = e.tagName === "SELECT" ? `DROPDOWN ${++blankNumber}` : `BLANK ${++blankNumber}`;
@@ -101,6 +103,69 @@ DOM_JS = r"""
     out.error = !out.question ? "The extracted question was empty" : "Visual questions cannot be auto-filled";
   }
   return JSON.stringify(out);
+})()
+"""
+
+REVIEW_JS = r"""
+(() => {
+  const shown = e => {
+    const s = getComputedStyle(e), r = e.getBoundingClientRect();
+    return s.display !== "none" && s.visibility !== "hidden" && r.width > 0 && r.height > 0;
+  };
+  const visible = e => { const r = e.getBoundingClientRect(); return shown(e) && r.bottom > 0 && r.right > 0 && r.top < innerHeight && r.left < innerWidth; };
+  const score = e => {
+    const r = e.getBoundingClientRect();
+    return Math.max(0, Math.min(r.bottom, innerHeight) - Math.max(r.top, 0)) *
+      Math.max(0, Math.min(r.right, innerWidth) - Math.max(r.left, 0));
+  };
+  const prompts = [...document.querySelectorAll(".prompt")].filter(visible).sort((a, b) => score(b) - score(a));
+  if (!prompts.length) return JSON.stringify({error: "No visible question was found"});
+  const prompt = prompts[0];
+  const question = prompt.closest('[data-automation-id="scoresheet-container"]') || prompt.closest(".dlc_question") || prompt.parentElement;
+  const promptCopy = prompt.cloneNode(true);
+  promptCopy.querySelectorAll("script, style, [hidden], ._visuallyHidden, .sr-only").forEach(e => e.remove());
+  let blankNumber = 0;
+  promptCopy.querySelectorAll('.fitb-input, input[type="text"], input:not([type]), input[type="number"], textarea, select').forEach(e => {
+    e.replaceWith(document.createTextNode(`[BLANK ${++blankNumber}]`));
+  });
+  const questionText = (promptCopy.textContent || "").replace(/\s+/g, " ").replace(/\s+([.,;:!?])/g, "$1").trim();
+  if (!questionText) return JSON.stringify({error: "The reviewed question was empty"});
+  const normalize = value => value.replace(/\s+/g, " ").trim().toLowerCase();
+  const correctHeader = [...document.querySelectorAll("*")].find(e => !e.children.length && normalize(e.textContent) === "correct answer");
+  const correctAnswers = correctHeader ? correctHeader.parentElement.innerText.split("\n")
+    .map(line => line.trim()).filter(line => line && normalize(line) !== "correct answer") : [];
+  const choices = [...question.querySelectorAll('input[type="radio"], input[type="checkbox"]')]
+    .filter(e => shown(e) || shown(e.closest("label") || e.parentElement));
+  const numbers = [...question.querySelectorAll('input[type="number"]')]
+    .filter(e => shown(e) || shown(e.closest("label") || e.parentElement));
+  const blanks = [...question.querySelectorAll('.fitb-input, input[type="text"], input:not([type]), textarea')]
+    .filter(e => shown(e) || shown(e.closest("label") || e.parentElement));
+  if (choices.length) {
+    if (choices.some(e => e.type === "radio") && choices.some(e => e.type === "checkbox")) {
+      return JSON.stringify({error: "The reviewed question has mixed choice controls"});
+    }
+    const type = choices[0].type === "radio" ? "multiple_choice" : "multi_select";
+    const choiceText = control => {
+      const label = control.closest("label") || control.closest(".choice-row") || control.parentElement;
+      const direct = [...label.childNodes].filter(node => node.nodeType === Node.TEXT_NODE).map(node => node.textContent).join(" ").trim();
+      return direct || label.querySelector(".choiceText")?.innerText.trim() || "";
+    };
+    const marked = choices.flatMap((control, index) => {
+      const label = control.closest("label") || control.closest(".choice-row") || control.parentElement;
+      const status = (label.querySelector(".sr-only")?.textContent || "").trim();
+      return /\bcorrect\b/i.test(status) && !/\bincorrect\b/i.test(status) ? [index + 1] : [];
+    });
+    const expected = new Set(correctAnswers.map(normalize));
+    const fromPanel = choices.flatMap((control, index) => expected.has(normalize(choiceText(control))) ? [index + 1] : []);
+    const choice_indices = marked.length ? marked : fromPanel;
+    if (!choice_indices.length) return JSON.stringify({error: "No correct answer was shown"});
+    return JSON.stringify({type, question: questionText, values: [], choice_indices});
+  }
+  const type = numbers.length ? "numeric" : blanks.length ? "fill_blank" : "unknown";
+  const fields = numbers.length || blanks.length;
+  if (!fields) return JSON.stringify({error: "No supported reviewed answer controls were found"});
+  if (correctAnswers.length !== fields) return JSON.stringify({error: "Could not match the displayed correct answer to every field"});
+  return JSON.stringify({type, question: questionText, values: correctAnswers, choice_indices: []});
 })()
 """
 
@@ -215,7 +280,43 @@ def extract_question(browser):
         return {"question": "", "type": "unavailable", "error": "The browser returned invalid question data"}
 
 
+def extract_review(browser):
+    output, execution_error = execute_javascript(browser, REVIEW_JS)
+    if execution_error:
+        return {"error": "Could not read the reviewed answer from the browser"}
+    try:
+        return json.loads(output)
+    except (TypeError, json.JSONDecodeError):
+        return {"error": "The browser returned an invalid reviewed answer"}
+
+
+def cache_key(question):
+    source = json.dumps({"type": question["type"], "question": question["question"]}, ensure_ascii=False, sort_keys=True)
+    return hashlib.sha256(source.encode()).hexdigest()
+
+
+def cached_answer(question):
+    try:
+        with CACHE_PATH.open() as cache_file:
+            return json.load(cache_file).get(cache_key(question))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def save_review(review):
+    key = cache_key(review)
+    try:
+        with CACHE_PATH.open() as cache_file:
+            cache = json.load(cache_file)
+    except (OSError, json.JSONDecodeError):
+        cache = {}
+    cache[key] = {"values": review["values"], "choice_indices": review["choice_indices"]}
+    CACHE_PATH.write_text(json.dumps(cache, ensure_ascii=False, indent=2) + "\n")
+    return len(review["choice_indices"]) or len(review["values"])
+
+
 def answer(payload):
+    prepare_client()
     content = [{"type": "input_text", "text": "Question:\n" + json.dumps(payload, ensure_ascii=False)}]
     response = client.responses.create(
         model=MODEL,
@@ -286,9 +387,14 @@ def prepare_client():
     client = OpenAI()
 
 
-def handle_request(browser, debug=False, started=None):
+def handle_request(browser, debug=False, learn=False, started=None):
     started = started or time.perf_counter()
     timings = {"request_received": 0.0} if debug else None
+    if learn:
+        review = extract_review(browser)
+        if review.get("error"):
+            return {"error": review["error"]}
+        return {"saved": save_review(review), "type": review["type"]}
     payload = extract_question(browser)
     if debug:
         timings["dom_extraction_complete"] = time.perf_counter() - started
@@ -300,7 +406,7 @@ def handle_request(browser, debug=False, started=None):
             raise RuntimeError(f"Automatic entry is not supported for {payload.get('type', 'unknown')}")
         if debug:
             timings["api_request_start"] = time.perf_counter() - started
-        result = answer(payload)
+        result = cached_answer(payload) or answer(payload)
         if debug:
             timings["api_response_received"] = time.perf_counter() - started
         application = {"applied": False, "attempted": False} if debug else apply_answer(browser, payload, result)
@@ -321,11 +427,6 @@ def worker():
     global client
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))
     try:
-        prepare_client()
-    except Exception as e:
-        print(json.dumps({"error": str(e)}), flush=True)
-        return
-    try:
         for line in sys.stdin:
             started = time.perf_counter()
             try:
@@ -335,6 +436,7 @@ def worker():
                 response = handle_request(
                     request.get("browser", ""),
                     request.get("debug", False),
+                    request.get("learn", False),
                     started,
                 )
             except Exception as e:
